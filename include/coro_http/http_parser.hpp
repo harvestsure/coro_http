@@ -76,17 +76,21 @@ inline HttpResponse parse_response(const std::string& response_data) {
     return response;
 }
 
-inline std::string build_request(const HttpRequest& request, const UrlInfo& url_info, bool enable_compression = true) {
+inline std::string build_request(const HttpRequest& request, const UrlInfo& url_info, bool enable_compression = true, bool keep_alive = false) {
     std::ostringstream req;
     
     req << method_to_string(request.method()) << " " << url_info.path << " HTTP/1.1\r\n";
     req << "Host: " << url_info.host << "\r\n";
     
     bool has_accept_encoding = false;
+    bool has_connection = false;
     for (const auto& [key, value] : request.headers()) {
         req << key << ": " << value << "\r\n";
         if (strcasecmp_parser(key, "Accept-Encoding")) {
             has_accept_encoding = true;
+        }
+        if (strcasecmp_parser(key, "Connection")) {
+            has_connection = true;
         }
     }
     
@@ -98,7 +102,10 @@ inline std::string build_request(const HttpRequest& request, const UrlInfo& url_
         req << "Content-Length: " << request.body().size() << "\r\n";
     }
     
-    req << "Connection: close\r\n";
+    if (!has_connection) {
+        req << "Connection: " << (keep_alive ? "keep-alive" : "close") << "\r\n";
+    }
+    
     req << "\r\n";
     
     if (!request.body().empty()) {

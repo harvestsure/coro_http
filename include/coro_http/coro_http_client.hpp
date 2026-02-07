@@ -6,6 +6,8 @@
 #include "http_parser.hpp"
 #include "client_config.hpp"
 #include "proxy_handler.hpp"
+#include "connection_pool.hpp"
+#include "rate_limiter.hpp"
 #include <asio.hpp>
 #include <asio/ssl.hpp>
 #include <asio/co_spawn.hpp>
@@ -24,7 +26,9 @@ public:
         : io_context_(), 
           ssl_context_(asio::ssl::context::tlsv12_client),
           config_(config),
-          proxy_info_(parse_proxy_url(config.proxy_url)) {
+          proxy_info_(parse_proxy_url(config.proxy_url)),
+          connection_pool_(config.max_connections_per_host, config.connection_idle_timeout),
+          rate_limiter_(config.enable_rate_limit ? config.rate_limit_requests : 0, config.rate_limit_window) {
         ssl_context_.set_default_verify_paths();
         
         if (config_.verify_ssl) {
@@ -91,6 +95,14 @@ private:
     }
 
     asio::awaitable<HttpResponse> co_execute_http(const HttpRequest& request, const UrlInfo& url_info) {
+        // Apply rate limiting (synchronous for now)
+        rate_limiter_.acquire();
+        
+        if (config_.enable_connection_pool && proxy_info_.type == ProxyType::NONE) {
+            co_return co_await co_execute_http_pooled(request, url_info);
+        }
+        
+        // Non-pooled connection for proxy requests
         asio::ip::tcp::socket socket(io_context_);
         co_await co_connect_socket(socket, url_info);
         
@@ -106,8 +118,44 @@ private:
         
         co_return parse_response(response_data);
     }
+    
+    asio::awaitable<HttpResponse> co_execute_http_pooled(const HttpRequest& request, const UrlInfo& url_info) {
+        auto socket = connection_pool_.get_connection(io_context_, url_info.host, url_info.port);
+        
+        // Check if we need to connect
+        if (!socket->is_open()) {
+            asio::ip::tcp::resolver resolver(io_context_);
+            auto endpoints = co_await resolver.async_resolve(
+                url_info.host, url_info.port, asio::use_awaitable);
+            co_await asio::async_connect(*socket, endpoints, asio::use_awaitable);
+        }
+        
+        std::string request_str = build_request(request, url_info, config_.enable_compression, true);
+        
+        try {
+            co_await asio::async_write(*socket, asio::buffer(request_str), asio::use_awaitable);
+            std::string response_data = co_await co_read_response(*socket);
+            
+            // Return connection to pool
+            connection_pool_.release_connection(socket, url_info.host, url_info.port);
+            
+            co_return parse_response(response_data);
+        } catch (...) {
+            // Don't return broken connection to pool
+            socket->close();
+            throw;
+        }
+    }
 
     asio::awaitable<HttpResponse> co_execute_https(const HttpRequest& request, const UrlInfo& url_info) {
+        // Apply rate limiting (synchronous for now)
+        rate_limiter_.acquire();
+        
+        if (config_.enable_connection_pool && proxy_info_.type == ProxyType::NONE) {
+            co_return co_await co_execute_https_pooled(request, url_info);
+        }
+        
+        // Non-pooled connection for proxy requests
         asio::ssl::stream<asio::ip::tcp::socket> ssl_socket(io_context_, ssl_context_);
         
         co_await co_connect_socket(ssl_socket.next_layer(), url_info);
@@ -128,6 +176,40 @@ private:
         std::string response_data = co_await co_read_response(ssl_socket);
         
         co_return parse_response(response_data);
+    }
+    
+    asio::awaitable<HttpResponse> co_execute_https_pooled(const HttpRequest& request, const UrlInfo& url_info) {
+        auto ssl_stream = connection_pool_.get_ssl_connection(io_context_, ssl_context_, url_info.host, url_info.port);
+        
+        // Check if we need to connect
+        if (!ssl_stream->lowest_layer().is_open()) {
+            asio::ip::tcp::resolver resolver(io_context_);
+            auto endpoints = co_await resolver.async_resolve(
+                url_info.host, url_info.port, asio::use_awaitable);
+            co_await asio::async_connect(ssl_stream->lowest_layer(), endpoints, asio::use_awaitable);
+            
+            if (config_.verify_ssl) {
+                SSL_set_tlsext_host_name(ssl_stream->native_handle(), url_info.host.c_str());
+            }
+            
+            co_await ssl_stream->async_handshake(asio::ssl::stream_base::client, asio::use_awaitable);
+        }
+        
+        std::string request_str = build_request(request, url_info, config_.enable_compression, true);
+        
+        try {
+            co_await asio::async_write(*ssl_stream, asio::buffer(request_str), asio::use_awaitable);
+            std::string response_data = co_await co_read_response(*ssl_stream);
+            
+            // Return connection to pool
+            connection_pool_.release_ssl_connection(ssl_stream, url_info.host, url_info.port);
+            
+            co_return parse_response(response_data);
+        } catch (...) {
+            // Don't return broken connection to pool
+            ssl_stream->lowest_layer().close();
+            throw;
+        }
     }
 
     asio::awaitable<void> co_connect_socket(asio::ip::tcp::socket& socket, const UrlInfo& url_info) {
@@ -324,12 +406,34 @@ public:
     const ClientConfig& get_config() const {
         return config_;
     }
+    
+    // Get connection pool statistics
+    ConnectionPool::Stats get_pool_stats() const {
+        return connection_pool_.get_stats();
+    }
+    
+    // Clear connection pool
+    void clear_connection_pool() {
+        connection_pool_.clear();
+    }
+    
+    // Get rate limiter remaining capacity
+    int get_rate_limit_remaining() const {
+        return rate_limiter_.remaining();
+    }
+    
+    // Reset rate limiter
+    void reset_rate_limiter() {
+        rate_limiter_.reset();
+    }
 
 private:
     asio::io_context io_context_;
     asio::ssl::context ssl_context_;
     ClientConfig config_;
     ProxyInfo proxy_info_;
+    ConnectionPool connection_pool_;
+    RateLimiter rate_limiter_;
 };
 
 }

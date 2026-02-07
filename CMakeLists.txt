@@ -40,3 +40,6 @@ target_link_libraries(example_advanced PRIVATE coro_http)
 
 add_executable(example_proxy examples/proxy_example.cpp)
 target_link_libraries(example_proxy PRIVATE coro_http)
+
+add_executable(example_keepalive examples/keepalive_example.cpp)
+target_link_libraries(example_keepalive PRIVATE coro_http)

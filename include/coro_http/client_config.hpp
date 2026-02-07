@@ -22,6 +22,16 @@ struct ClientConfig {
     std::string proxy_url;
     std::string proxy_username;
     std::string proxy_password;
+    
+    // Connection pool settings
+    bool enable_connection_pool{true};
+    int max_connections_per_host{5};
+    std::chrono::seconds connection_idle_timeout{60};
+    
+    // Rate limiting settings
+    bool enable_rate_limit{false};
+    int rate_limit_requests{100};      // requests per window
+    std::chrono::seconds rate_limit_window{1};  // window size
 };
 
 }

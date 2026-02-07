@@ -8,6 +8,8 @@ A modern C++20 HTTP/HTTPS client library based on [ASIO](https://github.com/chri
 - ✅ **C++20 Coroutines** - Modern async/await syntax for non-blocking operations
 - ✅ **Synchronous API** - Traditional blocking API for simple use cases
 - ✅ **Complete HTTP Methods** - GET, POST, PUT, DELETE, HEAD, PATCH, OPTIONS
+- ✅ **Connection Pool** - Keep-Alive support with automatic connection reuse
+- ✅ **Rate Limiting** - Built-in request rate limiter to avoid API throttling
 - ✅ **Timeout Control** - Configurable connect, read, and request timeouts
 - ✅ **Auto Redirects** - Automatic HTTP 3xx redirect following with chain tracking
 - ✅ **Compression** - Automatic gzip/deflate decompression
@@ -170,6 +172,16 @@ config.proxy_url = "http://proxy.example.com:8080";  // HTTP/HTTPS/SOCKS5 proxy
 config.proxy_username = "username";                   // Proxy authentication (optional)
 config.proxy_password = "password";                   // Proxy password (optional)
 
+// Connection pool settings
+config.enable_connection_pool = true;              // Enable connection pooling (default: true)
+config.max_connections_per_host = 5;               // Max connections per host (default: 5)
+config.connection_idle_timeout = std::chrono::seconds(60);  // Idle timeout (default: 60s)
+
+// Rate limiting settings  
+config.enable_rate_limit = true;                   // Enable rate limiting (default: false)
+config.rate_limit_requests = 100;                  // Max requests per window (default: 100)
+config.rate_limit_window = std::chrono::seconds(1);  // Rate limit window (default: 1s)
+
 // Create client with config
 coro_http::HttpClient client(config);
 
@@ -256,6 +268,93 @@ coro_http::CoroHttpClient client(config);
 client.run([&]() -> asio::awaitable<void> {
     auto response = co_await client.co_get("https://api.ipify.org?format=json");
     std::cout << "My IP through proxy: " << response.body() << "\n";
+});
+```
+
+#### Connection Pool & Keep-Alive
+
+The library automatically reuses TCP/TLS connections for better performance. This is especially important for:
+- **High-frequency trading APIs** (Binance, OKX, etc.)
+- **Repeated requests** to the same server
+- **REST API polling**
+
+```cpp
+coro_http::ClientConfig config;
+config.enable_connection_pool = true;         // Default: true
+config.max_connections_per_host = 5;          // Max 5 connections per host
+config.connection_idle_timeout = std::chrono::seconds(60);  // Keep connections for 60s
+
+coro_http::HttpClient client(config);
+
+// First request: establishes connection  (~300ms with TLS handshake)
+auto resp1 = client.get("https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT");
+
+// Subsequent requests: reuse connection (~50ms, 6x faster!)
+auto resp2 = client.get("https://api.binance.com/api/v3/account");
+auto resp3 = client.get("https://api.binance.com/api/v3/openOrders");
+
+// Check pool statistics
+auto stats = client.get_pool_stats();
+std::cout << "Active connections: " << stats.total_http_connections << "\n";
+
+// Clear pool if needed
+client.clear_connection_pool();
+```
+
+**Performance Impact:**
+- Without connection pool: Each request = DNS + TCP handshake + TLS handshake + HTTP (~300ms)
+- With connection pool: First request ~300ms, subsequent requests ~50ms
+- **Up to 6x faster for repeated requests!**
+
+#### Rate Limiting
+
+Built-in rate limiter helps avoid API throttling (essential for exchange APIs):
+
+```cpp
+coro_http::ClientConfig config;
+config.enable_rate_limit = true;
+config.rate_limit_requests = 10;              // 10 requests
+config.rate_limit_window = std::chrono::seconds(1);  // per second
+
+coro_http::HttpClient client(config);
+
+// These requests will be automatically throttled
+for (int i = 0; i < 20; ++i) {
+    // First 10 requests go through immediately
+    // Next 10 wait until the next 1-second window
+    auto resp = client.get("https://api.example.com/data");
+    
+    std::cout << "Rate limit remaining: " << client.get_rate_limit_remaining() << "\n";
+}
+
+// Reset rate limiter if needed
+client.reset_rate_limiter();
+```
+
+**Common Exchange Rate Limits:**
+- **Binance**: 1200 requests/minute (20 req/s)
+- **OKX**: 20 requests/2 seconds (10 req/s)  
+- **Coinbase**: 10 requests/second
+
+**Trading Bot Example:**
+```cpp
+coro_http::ClientConfig config;
+config.enable_connection_pool = true;
+config.enable_rate_limit = true;
+config.rate_limit_requests = 10;
+config.rate_limit_window = std::chrono::seconds(1);
+
+coro_http::CoroHttpClient client(config);
+
+client.run([&]() -> asio::awaitable<void> {
+    while (true) {
+        // Fetch ticker prices (automatically rate limited)
+        auto btc = co_await client.co_get("https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT");
+        auto eth = co_await client.co_get("https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT");
+        
+        // Process data...
+        std::cout << "Remaining capacity: " << client.get_rate_limit_remaining() << "\n";
+    }
 });
 ```
 
@@ -366,6 +465,7 @@ See the [examples](examples/) directory for complete working examples:
 - [https_example.cpp](examples/https_example.cpp) - HTTPS requests demonstration
 - [advanced_example.cpp](examples/advanced_example.cpp) - Advanced features (compression, redirects, timeouts, custom headers)
 - [proxy_example.cpp](examples/proxy_example.cpp) - Proxy support (HTTP/HTTPS/SOCKS5) with authentication
+- [keepalive_example.cpp](examples/keepalive_example.cpp) - Connection pooling and rate limiting for high-performance scenarios
 
 ## Building Examples
 
@@ -379,6 +479,8 @@ make
 ./example_coro
 ./example_https
 ./example_advanced
+./example_proxy
+./example_keepalive
 ./example_proxy
 ```
 
@@ -407,9 +509,30 @@ config.ca_cert_file = "/etc/ssl/certs/ca-certificates.crt";
 - **Synchronous API**: Best for simple scripts, CLI tools, or when making sequential requests
 - **Coroutine API**: Best for servers, high-throughput applications, or when making many concurrent requests
 
-### Connection Reuse
+### Connection Pooling (Enabled by Default)
 
-Currently, each request creates a new connection. For applications making many requests to the same server, consider implementing connection pooling.
+The library automatically reuses connections for better performance:
+
+- **First request**: DNS + TCP + TLS handshake + HTTP ≈ 300ms
+- **Subsequent requests**: HTTP only ≈ 50ms (6x faster!)
+- **Configurable**: `config.enable_connection_pool`, `config.max_connections_per_host`
+
+**Best for:**
+- Trading bots and exchange APIs
+- Repeated API polling
+- Microservice communication
+
+**Disable if:** You need fresh connections for every request (rare)
+
+### Rate Limiting
+
+Enable rate limiting to avoid API throttling:
+
+```cpp
+config.enable_rate_limit = true;
+config.rate_limit_requests = 10;  // Match your API limit
+config.rate_limit_window = std::chrono::seconds(1);
+```
 
 ### Memory Usage
 
@@ -419,12 +542,14 @@ The library buffers entire responses in memory. For very large responses (e.g., 
 
 Future enhancements under consideration:
 
-- Connection pooling and Keep-Alive support
-- Streaming downloads/uploads
+- ✅ Connection pooling and Keep-Alive support
+- ✅ Rate limiting
+- Streaming downloads/uploads  
 - HTTP/2 support
 - WebSocket upgrade
 - Cookie management
 - Request retry with exponential backoff
+- Async rate limiter (currently synchronous)
 ### Timeout Issues
 
 Adjust timeouts based on your network conditions:
