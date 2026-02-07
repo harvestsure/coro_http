@@ -173,10 +173,10 @@ private:
         // Apply rate limiting (synchronous for now)
         rate_limiter_.acquire();
         
-        // TODO: Connection pooling disabled due to stability issues
-        // if (config_.enable_connection_pool && proxy_info_.type == ProxyType::NONE) {
-        //     co_return co_await co_execute_http_pooled(request, url_info);
-        // }
+        // Use connection pool if enabled
+        if (config_.enable_connection_pool && proxy_info_.type == ProxyType::NONE) {
+            co_return co_await co_execute_http_pooled(request, url_info);
+        }
         
         // Non-pooled connection for proxy requests
         asio::ip::tcp::socket socket(io_context_);
@@ -245,10 +245,10 @@ private:
         // Apply rate limiting (synchronous for now)
         rate_limiter_.acquire();
         
-        // TODO: SSL connection pooling disabled due to stability issues
-        // if (config_.enable_connection_pool && proxy_info_.type == ProxyType::NONE) {
-        //     co_return co_await co_execute_https_pooled(request, url_info);
-        // }
+        // Use SSL connection pool if enabled
+        if (config_.enable_connection_pool && proxy_info_.type == ProxyType::NONE) {
+            co_return co_await co_execute_https_pooled(request, url_info);
+        }
         
         // Non-pooled connection for proxy requests
         asio::ssl::stream<asio::ip::tcp::socket> ssl_socket(io_context_, ssl_context_);

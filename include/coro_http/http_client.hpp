@@ -143,13 +143,12 @@ private:
         // Apply rate limiting
         rate_limiter_.acquire();
         
-        // TODO: Connection pooling needs improvement (proper Connection header handling, validation)
-        // Temporarily disabled to avoid hangs with servers that send Connection: close
-        // if (config_.enable_connection_pool && proxy_info_.type == ProxyType::NONE) {
-        //     return execute_http_pooled(request, url_info);
-        // }
+        // Use connection pool if enabled (supports proper Connection: close handling)
+        if (config_.enable_connection_pool && proxy_info_.type == ProxyType::NONE) {
+            return execute_http_pooled(request, url_info);
+        }
         
-        // Non-pooled connection for proxy requests
+        // Non-pooled connection (used for proxies or when pooling disabled)
         asio::ip::tcp::socket socket(io_context_);
         connect_socket(socket, url_info);
         
@@ -214,13 +213,12 @@ private:
         // Apply rate limiting
         rate_limiter_.acquire();
         
-        // TODO: SSL connection pooling needs improvement (session reuse, proper close detection)
-        // Temporarily disabled for HTTPS to avoid hangs
-        // if (config_.enable_connection_pool && proxy_info_.type == ProxyType::NONE) {
-        //     return execute_https_pooled(request, url_info);
-        // }
+        // Use SSL connection pool if enabled (supports session validation and close detection)
+        if (config_.enable_connection_pool && proxy_info_.type == ProxyType::NONE) {
+            return execute_https_pooled(request, url_info);
+        }
         
-        // Non-pooled connection for proxy requests
+        // Non-pooled connection (used for proxies or when pooling disabled)
         asio::ssl::stream<asio::ip::tcp::socket> ssl_socket(io_context_, ssl_context_);
         
         if (proxy_info_.type != ProxyType::NONE) {
