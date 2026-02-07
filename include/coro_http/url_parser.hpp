@@ -37,7 +37,7 @@ inline std::string method_to_string(HttpMethod method) {
         case HttpMethod::GET: return "GET";
         case HttpMethod::POST: return "POST";
         case HttpMethod::PUT: return "PUT";
-        case HttpMethod::DELETE: return "DELETE";
+        case HttpMethod::DEL: return "DELETE";
         case HttpMethod::HEAD: return "HEAD";
         case HttpMethod::PATCH: return "PATCH";
         case HttpMethod::OPTIONS: return "OPTIONS";

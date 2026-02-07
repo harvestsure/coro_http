@@ -324,7 +324,7 @@ public:
     }
 
     HttpResponse del(const std::string& url) {
-        return execute(HttpRequest(HttpMethod::DELETE, url));
+        return execute(HttpRequest(HttpMethod::DEL, url));
     }
 
     HttpResponse head(const std::string& url) {

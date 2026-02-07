@@ -296,7 +296,7 @@ public:
     }
 
     asio::awaitable<HttpResponse> co_delete(const std::string& url) {
-        co_return co_await co_execute(HttpRequest(HttpMethod::DELETE, url));
+        co_return co_await co_execute(HttpRequest(HttpMethod::DEL, url));
     }
 
     asio::awaitable<HttpResponse> co_head(const std::string& url) {

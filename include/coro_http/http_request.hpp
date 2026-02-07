@@ -9,7 +9,7 @@ enum class HttpMethod {
     GET,
     POST,
     PUT,
-    DELETE,
+    DEL,
     HEAD,
     PATCH,
     OPTIONS
