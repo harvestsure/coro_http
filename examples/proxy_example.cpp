@@ -1,4 +1,5 @@
 #include <iostream>
+#include <asio.hpp>
 #include "coro_http/http_client.hpp"
 #include "coro_http/coro_http_client.hpp"
 
@@ -7,12 +8,13 @@ using namespace coro_http;
 void sync_http_proxy_example() {
     std::cout << "--- Synchronous HTTP Proxy Example ---\n";
     
+    asio::io_context io_ctx;
     ClientConfig config;
     config.proxy_url = "http://proxy.example.com:8080";
     // config.proxy_username = "user";
     // config.proxy_password = "pass";
     
-    HttpClient client(config);
+    HttpClient client(io_ctx, config);
     
     try {
         auto response = client.get("http://httpbin.org/ip");
@@ -26,12 +28,13 @@ void sync_http_proxy_example() {
 void sync_https_proxy_example() {
     std::cout << "\n--- Synchronous HTTPS Proxy (CONNECT) Example ---\n";
     
+    asio::io_context io_ctx;
     ClientConfig config;
     config.proxy_url = "http://proxy.example.com:8080";
     // config.proxy_username = "user";
     // config.proxy_password = "pass";
     
-    HttpClient client(config);
+    HttpClient client(io_ctx, config);
     
     try {
         auto response = client.get("https://httpbin.org/ip");
@@ -45,12 +48,13 @@ void sync_https_proxy_example() {
 void sync_socks5_proxy_example() {
     std::cout << "\n--- Synchronous SOCKS5 Proxy Example ---\n";
     
+    asio::io_context io_ctx;
     ClientConfig config;
     config.proxy_url = "socks5://127.0.0.1:1080";
     // config.proxy_username = "user";
     // config.proxy_password = "pass";
     
-    HttpClient client(config);
+    HttpClient client(io_ctx, config);
     
     try {
         auto response = client.get("http://httpbin.org/ip");
@@ -64,12 +68,13 @@ void sync_socks5_proxy_example() {
 void async_http_proxy_example() {
     std::cout << "\n--- Asynchronous HTTP Proxy Example ---\n";
     
+    asio::io_context io_ctx;
     ClientConfig config;
     config.proxy_url = "http://proxy.example.com:8080";
     // config.proxy_username = "user";
     // config.proxy_password = "pass";
     
-    CoroHttpClient client(config);
+    CoroHttpClient client(io_ctx, config);
     
     client.run([&client]() -> asio::awaitable<void> {
         try {
@@ -85,10 +90,11 @@ void async_http_proxy_example() {
 void async_https_proxy_example() {
     std::cout << "\n--- Asynchronous HTTPS Proxy (CONNECT) Example ---\n";
     
+    asio::io_context io_ctx;
     ClientConfig config;
     config.proxy_url = "http://proxy.example.com:8080";
     
-    CoroHttpClient client(config);
+    CoroHttpClient client(io_ctx, config);
     
     client.run([&client]() -> asio::awaitable<void> {
         try {
@@ -104,12 +110,13 @@ void async_https_proxy_example() {
 void async_socks5_proxy_example() {
     std::cout << "\n--- Asynchronous SOCKS5 Proxy Example ---\n";
     
+    asio::io_context io_ctx;
     ClientConfig config;
     config.proxy_url = "socks5://127.0.0.1:1080";
     // config.proxy_username = "user";
     // config.proxy_password = "pass";
     
-    CoroHttpClient client(config);
+    CoroHttpClient client(io_ctx, config);
     
     client.run([&client]() -> asio::awaitable<void> {
         try {

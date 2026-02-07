@@ -1,11 +1,13 @@
 #include "../include/coro_http/coro_http.hpp"
 #include <iostream>
+#include <asio.hpp>
 
 using namespace coro_http;
 
 int main() {
     std::cout << "=== HTTP Auth & Features Example ===" << std::endl;
     
+    asio::io_context io_ctx;
     ClientConfig config;
     config.connect_timeout = std::chrono::seconds(5);
     config.read_timeout = std::chrono::seconds(5);
@@ -13,7 +15,7 @@ int main() {
     // Example 1: Basic Auth
     std::cout << "\n[1] Basic Auth" << std::endl;
     try {
-        HttpClient client(config);
+        HttpClient client(io_ctx, config);
         auto req = HttpRequest(HttpMethod::GET, "https://httpbin.org/basic-auth/user/passwd");
         req.add_header("Authorization", Auth::basic("user", "passwd"));
         auto resp = client.execute(req);
@@ -26,7 +28,7 @@ int main() {
     // Example 2: Bearer Token
     std::cout << "\n[2] Bearer Token" << std::endl;
     try {
-        HttpClient client(config);
+        HttpClient client(io_ctx, config);
         auto req = HttpRequest(HttpMethod::GET, "https://httpbin.org/bearer");
         req.add_header("Authorization", Auth::bearer("test-token-123"));
         auto resp = client.execute(req);
@@ -39,7 +41,7 @@ int main() {
     // Example 3: Form Data POST
     std::cout << "\n[3] Form Data POST" << std::endl;
     try {
-        HttpClient client(config);
+        HttpClient client(io_ctx, config);
         FormData form;
         form.add("username", "john_doe")
             .add("email", "john@example.com")
@@ -63,7 +65,7 @@ int main() {
     try {
         ClientConfig cfg = config;
         cfg.enable_cookies = true;
-        HttpClient client(cfg);
+        HttpClient client(io_ctx, cfg);
         
         // First request sets cookies
         auto r1 = client.get("https://httpbin.org/cookies/set?session=abc123&user=john");

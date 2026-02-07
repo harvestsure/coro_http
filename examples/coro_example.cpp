@@ -1,5 +1,6 @@
 #include <coro_http/coro_http.hpp>
 #include <iostream>
+#include <asio.hpp>
 
 asio::awaitable<void> async_main(coro_http::CoroHttpClient& client) {
     try {
@@ -59,7 +60,8 @@ asio::awaitable<void> async_main(coro_http::CoroHttpClient& client) {
 }
 
 int main() {
-    coro_http::CoroHttpClient client;
+    asio::io_context io_ctx;
+    coro_http::CoroHttpClient client(io_ctx);
     client.run([&]() -> asio::awaitable<void> {
         co_await async_main(client);
     });

@@ -194,7 +194,8 @@ config.retry_on_connection_error = true;           // Retry on connection errors
 config.retry_on_5xx = false;                       // Retry on 5xx errors (default: false)
 
 // Create client with config
-coro_http::HttpClient client(config);
+asio::io_context io_ctx;
+coro_http::HttpClient client(io_ctx, config);
 
 // Or update config after creation
 client.set_config(config);
@@ -227,11 +228,12 @@ auto response = client.get("https://httpbin.org/gzip");
 #### SSL Certificate Verification
 
 ```cpp
+asio::io_context io_ctx;
 coro_http::ClientConfig config;
 config.verify_ssl = true;  // Enable strict certificate verification
 config.ca_cert_file = "/etc/ssl/certs/ca-certificates.crt";
 
-coro_http::HttpClient client(config);
+coro_http::HttpClient client(io_ctx, config);
 auto response = client.get("https://example.com");
 ```
 
@@ -253,7 +255,8 @@ config.proxy_url = "http://proxy.example.com:8080";
 config.proxy_username = "user";
 config.proxy_password = "password";
 
-coro_http::HttpClient client(config);
+asio::io_context io_ctx;
+coro_http::HttpClient client(io_ctx, config);
 
 // For HTTP requests, proxy forwards the request
 auto http_resp = client.get("http://example.com");
@@ -269,13 +272,14 @@ auto https_resp = client.get("https://example.com");
 
 ```cpp
 // Complete proxy example
+asio::io_context io_ctx;
 coro_http::ClientConfig config;
 config.proxy_url = "socks5://proxy.example.com:1080";
 config.proxy_username = "myuser";
 config.proxy_password = "mypass";
 config.verify_ssl = true;
 
-coro_http::CoroHttpClient client(config);
+coro_http::CoroHttpClient client(io_ctx, config);
 client.run([&]() -> asio::awaitable<void> {
     auto response = co_await client.co_get("https://api.ipify.org?format=json");
     std::cout << "My IP through proxy: " << response.body() << "\n";
@@ -289,12 +293,13 @@ client.run([&]() -> asio::awaitable<void> {
 The library supports connection pool for better performance with automatic keep-alive:
 
 ```cpp
+asio::io_context io_ctx;
 coro_http::ClientConfig config;
 config.enable_connection_pool = true;         // Now safer to enable!
 config.max_connections_per_host = 5;
 config.connection_idle_timeout = std::chrono::seconds(60);
 
-coro_http::HttpClient client(config);
+coro_http::HttpClient client(io_ctx, config);
 ```
 
 **Recent Fixes (v1.1):**
@@ -332,7 +337,8 @@ config.enable_rate_limit = true;
 config.rate_limit_requests = 10;              // 10 requests
 config.rate_limit_window = std::chrono::seconds(1);  // per second
 
-coro_http::HttpClient client(config);
+asio::io_context io_ctx;
+coro_http::HttpClient client(io_ctx, config);
 
 // These requests will be automatically throttled
 for (int i = 0; i < 20; ++i) {
@@ -354,13 +360,14 @@ client.reset_rate_limiter();
 
 **Trading Bot Example:**
 ```cpp
+asio::io_context io_ctx;
 coro_http::ClientConfig config;
 config.enable_connection_pool = true;
 config.enable_rate_limit = true;
 config.rate_limit_requests = 10;
 config.rate_limit_window = std::chrono::seconds(1);
 
-coro_http::CoroHttpClient client(config);
+coro_http::CoroHttpClient client(io_ctx, config);
 
 client.run([&]() -> asio::awaitable<void> {
     while (true) {
@@ -379,6 +386,7 @@ client.run([&]() -> asio::awaitable<void> {
 Built-in retry mechanism improves reliability for transient failures:
 
 ```cpp
+asio::io_context io_ctx;
 coro_http::ClientConfig config;
 config.enable_retry = true;
 config.max_retries = 3;                          // Retry up to 3 times
@@ -389,7 +397,7 @@ config.retry_on_timeout = true;                  // Retry on timeouts
 config.retry_on_connection_error = true;         // Retry on connection errors
 config.retry_on_5xx = false;                     // Don't retry 5xx by default
 
-coro_http::HttpClient client(config);
+coro_http::HttpClient client(io_ctx, config);
 
 try {
     // Automatically retries on timeout/connection errors
@@ -397,6 +405,7 @@ try {
     std::cout << "Success after retries!\n";
 } catch (const std::exception& e) {
     std::cerr << "Failed after " << config.max_retries << " retries: " << e.what() << "\n";
+}
 }
 ```
 
@@ -422,7 +431,8 @@ config.enable_retry = true;
 config.max_retries = 5;
 config.retry_on_5xx = true;  // Also retry server errors
 
-coro_http::CoroHttpClient client(config);
+asio::io_context io_ctx;
+coro_http::CoroHttpClient client(io_ctx, config);
 
 client.run([&]() -> asio::awaitable<void> {
     try {
@@ -449,7 +459,8 @@ coro_http::ClientConfig config;
 config.connect_timeout = std::chrono::milliseconds(1000);
 config.read_timeout = std::chrono::milliseconds(2000);
 
-coro_http::HttpClient client(config);
+asio::io_context io_ctx;
+coro_http::HttpClient client(io_ctx, config);
 
 try {
     auto response = client.get("https://slow-server.com");
@@ -464,13 +475,16 @@ try {
 ### Synchronous HttpClient
 
 ```cpp
+// Create io_context
+asio::io_context io_ctx;
+
 // Default configuration
-coro_http::HttpClient client;
+coro_http::HttpClient client(io_ctx);
 
 // With custom configuration
 coro_http::ClientConfig config;
 config.connect_timeout = std::chrono::milliseconds(5000);
-coro_http::HttpClient client(config);
+coro_http::HttpClient client(io_ctx, config);
 
 // HTTP Methods
 auto resp = client.get(url);
@@ -492,7 +506,8 @@ auto resp = client.execute(req);
 ### Coroutine CoroHttpClient
 
 ```cpp
-coro_http::CoroHttpClient client;
+asio::io_context io_ctx;
+coro_http::CoroHttpClient client(io_ctx);
 
 client.run([&]() -> asio::awaitable<void> {
     // All methods return awaitable<HttpResponse>

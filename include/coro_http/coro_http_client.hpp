@@ -23,10 +23,11 @@ namespace coro_http {
 
 class CoroHttpClient {
 public:
-    CoroHttpClient() : CoroHttpClient(ClientConfig{}) {}
+    explicit CoroHttpClient(asio::io_context& io_context)
+        : CoroHttpClient(io_context, ClientConfig{}) {}
     
-    explicit CoroHttpClient(const ClientConfig& config)
-        : io_context_(), 
+    CoroHttpClient(asio::io_context& io_context, const ClientConfig& config)
+        : io_context_(io_context), 
           ssl_context_(asio::ssl::context::tlsv12_client),
           config_(config),
           proxy_info_(parse_proxy_url(config.proxy_url)),
@@ -687,7 +688,7 @@ public:
     }
 
 private:
-    asio::io_context io_context_;
+    asio::io_context& io_context_;
     asio::ssl::context ssl_context_;
     ClientConfig config_;
     ProxyInfo proxy_info_;

@@ -1,9 +1,11 @@
 #include <coro_http/coro_http.hpp>
 #include <iostream>
+#include <asio.hpp>
 
 int main() {
     try {
-        coro_http::HttpClient client;
+        asio::io_context io_ctx;
+        coro_http::HttpClient client(io_ctx);
 
         auto response = client.get("https://httpbin.org/get");
         std::cout << "GET Status: " << response.status_code() << "\n";

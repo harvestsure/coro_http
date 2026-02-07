@@ -1,5 +1,6 @@
 #include <iostream>
 #include <chrono>
+#include <asio.hpp>
 #include "coro_http/http_client.hpp"
 #include "coro_http/coro_http_client.hpp"
 
@@ -8,6 +9,7 @@ using namespace coro_http;
 void sync_retry_demo() {
     std::cout << "=== Synchronous Retry Demo ===\n\n";
     
+    asio::io_context io_ctx;
     ClientConfig config;
     config.enable_retry = true;
     config.max_retries = 2;  // Reduced for demo
@@ -18,7 +20,7 @@ void sync_retry_demo() {
     config.connect_timeout = std::chrono::milliseconds(1000);  // 1 second timeout
     config.read_timeout = std::chrono::milliseconds(1000);
     
-    HttpClient client(config);
+    HttpClient client(io_ctx, config);
     
     std::cout << "Retry configuration:\n";
     std::cout << "  Max retries: " << config.max_retries << "\n";
@@ -59,13 +61,14 @@ void sync_retry_demo() {
 void sync_5xx_retry_demo() {
     std::cout << "=== 5xx Error Retry Demo ===\n\n";
     
+    asio::io_context io_ctx;
     ClientConfig config;
     config.enable_retry = true;
     config.max_retries = 2;
     config.initial_retry_delay = std::chrono::milliseconds(1000);
     config.retry_on_5xx = true;  // Enable retry on server errors
     
-    HttpClient client(config);
+    HttpClient client(io_ctx, config);
     
     std::cout << "Testing 5xx error retry (retry_on_5xx = true)...\n";
     
@@ -83,6 +86,7 @@ void sync_5xx_retry_demo() {
 void async_retry_demo() {
     std::cout << "=== Asynchronous Retry Demo ===\n\n";
     
+    asio::io_context io_ctx;
     ClientConfig config;
     config.enable_retry = true;
     config.max_retries = 2;  // Reduced for faster demo
@@ -92,7 +96,7 @@ void async_retry_demo() {
     config.connect_timeout = std::chrono::milliseconds(1000);  // Shorter timeout
     config.read_timeout = std::chrono::milliseconds(1000);
     
-    CoroHttpClient client(config);
+    CoroHttpClient client(io_ctx, config);
     
     client.run([&]() -> asio::awaitable<void> {
         std::cout << "Testing async retry with short timeout...\n";
@@ -129,6 +133,7 @@ void async_retry_demo() {
 void production_example() {
     std::cout << "=== Production Configuration Example ===\n\n";
     
+    asio::io_context io_ctx;
     ClientConfig config;
     // Connection pool for performance
     config.enable_connection_pool = true;
@@ -151,7 +156,7 @@ void production_example() {
     config.connect_timeout = std::chrono::milliseconds(5000);
     config.read_timeout = std::chrono::milliseconds(10000);
     
-    CoroHttpClient client(config);
+    CoroHttpClient client(io_ctx, config);
     
     std::cout << "Configuration:\n";
     std::cout << "  - Connection pooling: enabled\n";

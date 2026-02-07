@@ -2,9 +2,12 @@
 #include <coro_http/client_config.hpp>
 #include <iostream>
 #include <chrono>
+#include <asio.hpp>
 
 int main() {
     try {
+        asio::io_context io_ctx;
+        
         coro_http::ClientConfig config;
         config.connect_timeout = std::chrono::milliseconds(5000);
         config.read_timeout = std::chrono::milliseconds(10000);
@@ -14,7 +17,7 @@ int main() {
         config.enable_compression = true;
         config.verify_ssl = false;
 
-        coro_http::HttpClient client(config);
+        coro_http::HttpClient client(io_ctx, config);
 
         std::cout << "=== Test: Compression Support ===" << "\n";
         auto gzip_resp = client.get("https://httpbin.org/gzip");
@@ -61,7 +64,7 @@ int main() {
         coro_http::ClientConfig timeout_config;
         timeout_config.connect_timeout = std::chrono::milliseconds(1000);
         timeout_config.read_timeout = std::chrono::milliseconds(2000);
-        coro_http::HttpClient timeout_client(timeout_config);
+        coro_http::HttpClient timeout_client(io_ctx, timeout_config);
         
         try {
             auto delay_resp = timeout_client.get("https://httpbin.org/delay/10");
