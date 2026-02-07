@@ -83,7 +83,8 @@ cd coro_http (Simple & Straightforward)
 #include <iostream>
 
 int main() {
-    coro_http::HttpClient client;
+    asio::io_context io_ctx;
+    coro_http::HttpClient client(io_ctx);
     
     // Simple GET request
     auto response = client.get("https://api.github.com/users/github");
