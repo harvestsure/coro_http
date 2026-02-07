@@ -9,12 +9,14 @@
 #include "connection_pool.hpp"
 #include "rate_limiter.hpp"
 #include "retry_policy.hpp"
+#include "cookie_jar.hpp"
 #include <asio.hpp>
 #include <asio/ssl.hpp>
 #include <asio/steady_timer.hpp>
 #include <system_error>
 #include <memory>
 #include <sstream>
+#include <iostream>
 
 namespace coro_http {
 
@@ -102,11 +104,30 @@ private:
     HttpResponse execute_with_redirects(const HttpRequest& request, int redirect_count) {
         auto url_info = parse_url(request.url());
         
+        // Add cookies to request if enabled
+        HttpRequest req_with_cookies = request;
+        if (config_.enable_cookies) {
+            std::string cookies = cookie_jar_.get_cookies_for_request(
+                url_info.host, url_info.path, url_info.is_https);
+            if (!cookies.empty()) {
+                req_with_cookies.add_header("Cookie", cookies);
+            }
+        }
+        
         HttpResponse response;
         if (url_info.is_https) {
-            response = execute_https(request, url_info);
+            response = execute_https(req_with_cookies, url_info);
         } else {
-            response = execute_http(request, url_info);
+            response = execute_http(req_with_cookies, url_info);
+        }
+        
+        // Extract cookies from response if enabled
+        if (config_.enable_cookies) {
+            for (const auto& [key, value] : response.headers()) {
+                if (strcasecmp_parser(key, "Set-Cookie")) {
+                    cookie_jar_.parse_set_cookie(value, url_info.host);
+                }
+            }
         }
         
         if (config_.follow_redirects && 
@@ -306,28 +327,7 @@ private:
         }
         
         auto endpoints = resolver.resolve(connect_host, connect_port);
-        
-        asio::steady_timer timer(io_context_);
-        timer.expires_after(config_.connect_timeout);
-        bool timeout_occurred = false;
-        
-        timer.async_wait([&](const std::error_code& ec) {
-            if (!ec) {
-                timeout_occurred = true;
-                socket.close();
-            }
-        });
-        
-        std::error_code connect_ec;
-        asio::connect(socket, endpoints, connect_ec);
-        timer.cancel();
-        
-        if (timeout_occurred || connect_ec == asio::error::operation_aborted) {
-            throw std::runtime_error("Connection timeout");
-        }
-        if (connect_ec) {
-            throw std::system_error(connect_ec);
-        }
+        asio::connect(socket, endpoints);
         
         if (proxy_info_.type == ProxyType::SOCKS5) {
             perform_socks5_handshake(socket, url_info);
@@ -436,37 +436,95 @@ private:
         std::string response_data;
         std::array<char, 8192> buffer;
         
-        asio::steady_timer timer(io_context_);
-        timer.expires_after(config_.read_timeout);
-        bool timeout_occurred = false;
-        
-        timer.async_wait([&](const std::error_code& ec) {
-            if (!ec) {
-                timeout_occurred = true;
-                std::error_code close_ec;
-                stream.lowest_layer().close(close_ec);
-            }
-        });
-        
         std::error_code ec;
+        bool headers_complete = false;
+        size_t content_length = 0;
+        bool is_chunked = false;
+        size_t headers_end_pos = 0;
+        
+        // Read until we have complete headers and body
         while (true) {
             size_t len = stream.read_some(asio::buffer(buffer), ec);
             if (len > 0) {
                 response_data.append(buffer.data(), len);
+                
+                // Check if headers are complete
+                if (!headers_complete) {
+                    size_t header_end = response_data.find("\r\n\r\n");
+                    if (header_end != std::string::npos) {
+                        headers_complete = true;
+                        headers_end_pos = header_end + 4;
+                        
+                        // Parse headers to find Content-Length or Transfer-Encoding
+                        std::string headers = response_data.substr(0, headers_end_pos);
+                        
+                        // Check for chunked encoding
+                        if (headers.find("Transfer-Encoding: chunked") != std::string::npos ||
+                            headers.find("transfer-encoding: chunked") != std::string::npos) {
+                            is_chunked = true;
+                        }
+                        
+                        // Try to find Content-Length
+                        size_t cl_pos = headers.find("Content-Length:");
+                        if (cl_pos == std::string::npos) {
+                            cl_pos = headers.find("content-length:");
+                        }
+                        if (cl_pos != std::string::npos) {
+                            size_t value_start = headers.find(':', cl_pos) + 1;
+                            size_t value_end = headers.find('\r', value_start);
+                            std::string cl_str = headers.substr(value_start, value_end - value_start);
+                            // Trim whitespace
+                            cl_str.erase(0, cl_str.find_first_not_of(" \t"));
+                            cl_str.erase(cl_str.find_last_not_of(" \t") + 1);
+                            try {
+                                content_length = std::stoull(cl_str);
+                            } catch (...) {}
+                        }
+                    }
+                }
+                
+                // Check if we have complete body
+                if (headers_complete) {
+                    size_t body_size = response_data.size() - headers_end_pos;
+                    
+                    if (is_chunked) {
+                        // For chunked, check if we have the final chunk (0\r\n\r\n)
+                        if (response_data.find("0\r\n\r\n") != std::string::npos) {
+                            break;
+                        }
+                    } else if (content_length > 0) {
+                        // For content-length, check if we have all data
+                        if (body_size >= content_length) {
+                            break;
+                        }
+                    }
+                }
             }
             
             if (ec == asio::error::eof || ec == asio::ssl::error::stream_truncated) {
                 break;
-            } else if (ec == asio::error::operation_aborted && timeout_occurred) {
-                timer.cancel();
-                throw std::runtime_error("Read timeout");
             } else if (ec) {
-                timer.cancel();
                 throw std::system_error(ec);
+            }
+            
+            // Safety: if we have headers but no content length and no chunked,
+            // and we got some data, assume response is complete
+            if (headers_complete && !is_chunked && content_length == 0 && len > 0) {
+                // Wait a bit more to see if there's more data
+                stream.lowest_layer().non_blocking(true);
+                std::error_code peek_ec;
+                size_t peek_len = stream.read_some(asio::buffer(buffer), peek_ec);
+                stream.lowest_layer().non_blocking(false);
+                
+                if (peek_len > 0) {
+                    response_data.append(buffer.data(), peek_len);
+                } else if (peek_ec == asio::error::would_block) {
+                    // No more data available, response complete
+                    break;
+                }
             }
         }
         
-        timer.cancel();
         return response_data;
     }
 
@@ -527,6 +585,16 @@ public:
     void reset_rate_limiter() {
         rate_limiter_.reset();
     }
+    
+    // Get cookie jar
+    CookieJar& cookies() {
+        return cookie_jar_;
+    }
+    
+    // Get cookie jar (const)
+    const CookieJar& cookies() const {
+        return cookie_jar_;
+    }
 
 private:
     asio::io_context io_context_;
@@ -536,6 +604,7 @@ private:
     ConnectionPool connection_pool_;
     RateLimiter rate_limiter_;
     RetryPolicy retry_policy_;
+    CookieJar cookie_jar_;
 };
 
 }

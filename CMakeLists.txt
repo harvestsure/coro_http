@@ -46,3 +46,9 @@ target_link_libraries(example_keepalive PRIVATE coro_http)
 
 add_executable(example_retry examples/retry_example.cpp)
 target_link_libraries(example_retry PRIVATE coro_http)
+
+add_executable(example_auth_features examples/auth_features_example.cpp)
+target_link_libraries(example_auth_features PRIVATE coro_http)
+
+add_executable(example_auth_local examples/auth_features_local_test.cpp)
+target_link_libraries(example_auth_local PRIVATE coro_http)

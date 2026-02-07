@@ -41,6 +41,9 @@ struct ClientConfig {
     bool retry_on_timeout{true};       // Retry on connection/read timeout
     bool retry_on_connection_error{true};  // Retry on connection errors
     bool retry_on_5xx{false};          // Retry on 5xx server errors (disabled by default)
+    
+    // Cookie settings
+    bool enable_cookies{false};        // Enable automatic cookie management
 };
 
 }

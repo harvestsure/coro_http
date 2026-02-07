@@ -5,3 +5,7 @@
 #include "http_client.hpp"
 #include "coro_http_client.hpp"
 #include "client_config.hpp"
+#include "auth.hpp"
+#include "form_data.hpp"
+#include "cookie_jar.hpp"
+#include "interceptor.hpp"
