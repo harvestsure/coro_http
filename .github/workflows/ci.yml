@@ -10,22 +10,18 @@ jobs:
   build-and-test:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        compiler:
-          - { name: gcc, version: 11 }
-          - { name: clang, version: 14 }
-        exclude:
-          # MSVC only on Windows
+        include:
+          # Linux with GCC and Clang
           - os: ubuntu-latest
-            compiler: { name: msvc, version: "" }
+            compiler: { name: gcc, version: 12 }
+          - os: ubuntu-latest
+            compiler: { name: clang, version: 18 }
+          # macOS with Apple Clang
           - os: macos-latest
-            compiler: { name: msvc, version: "" }
-          # GCC on macOS not needed
-          - os: macos-latest
-            compiler: { name: gcc, version: 11 }
-          # Clang on Windows not needed
+            compiler: { name: apple-clang }
+          # Windows with MSVC
           - os: windows-latest
-            compiler: { name: clang, version: 14 }
+            compiler: { name: msvc }
 
     runs-on: ${{ matrix.os }}
     
@@ -39,14 +35,14 @@ jobs:
         sudo apt-get install -y \
           libssl-dev \
           zlib1g-dev \
-          gcc-${{ matrix.compiler.version }} \
-          g++-${{ matrix.compiler.version }} \
-          clang-${{ matrix.compiler.version }}
+          gcc-12 \
+          g++-12 \
+          clang-18
     
     - name: Install dependencies (macOS)
       if: runner.os == 'macOS'
       run: |
-        brew install openssl zlib llvm@14
+        brew install openssl zlib llvm@18
     
     - name: Install dependencies (Windows)
       if: runner.os == 'Windows'
@@ -59,8 +55,8 @@ jobs:
     - name: Create build directory
       run: mkdir -p build
     
-    - name: Configure CMake (Linux/macOS with GCC)
-      if: matrix.compiler.name == 'gcc'
+    - name: Configure CMake (Linux with GCC)
+      if: runner.os == 'Linux' && matrix.compiler.name == 'gcc'
       run: |
         cd build
         cmake .. \
@@ -69,8 +65,8 @@ jobs:
           -DENABLE_SANITIZER=ON \
           -DBUILD_TESTS=ON
     
-    - name: Configure CMake (Linux/macOS with Clang)
-      if: matrix.compiler.name == 'clang' && runner.os != 'macOS'
+    - name: Configure CMake (Linux with Clang)
+      if: runner.os == 'Linux' && matrix.compiler.name == 'clang'
       run: |
         cd build
         cmake .. \
@@ -80,7 +76,7 @@ jobs:
           -DBUILD_TESTS=ON
     
     - name: Configure CMake (macOS with AppleClang)
-      if: matrix.compiler.name == 'clang' && runner.os == 'macOS'
+      if: runner.os == 'macOS'
       run: |
         cd build
         cmake .. \
@@ -91,7 +87,7 @@ jobs:
       if: runner.os == 'Windows'
       run: |
         cd build
-        cmake .. -DBUILD_TESTS=ON
+        cmake .. -DBUILD_TESTS=ON -DENABLE_SANITIZER=OFF
     
     - name: Build
       run: |
@@ -151,7 +147,7 @@ jobs:
         sudo apt-get install -y \
           libssl-dev \
           zlib1g-dev \
-          clang-14
+          clang-18
     
     - name: Setup CMake
       uses: lukka/get-cmake@latest
@@ -163,8 +159,8 @@ jobs:
       run: |
         cd build
         cmake .. \
-          -DCMAKE_CXX_COMPILER=clang++-14 \
-          -DCMAKE_C_COMPILER=clang-14 \
+          -DCMAKE_CXX_COMPILER=clang++-18 \
+          -DCMAKE_C_COMPILER=clang-18 \
           -DENABLE_SANITIZER=ON \
           -DBUILD_TESTS=ON
     
