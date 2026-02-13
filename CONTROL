@@ -1,6 +1,6 @@
-Source: coro-http
+Source: coro-http-client
 Version: 1.0.0
-Homepage: https://github.com/harvestsure/coro-http
+Homepage: https://github.com/harvestsure/coro-http-client
 Description: A modern C++20 HTTP/HTTPS client library with coroutine-based async/await API
 Supports: linux | macos | windows
 Build-Depends: asio, openssl, zlib

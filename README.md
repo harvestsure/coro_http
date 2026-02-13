@@ -1,8 +1,8 @@
-# coro_http
+# coro-http-client
 
-[![windows](https://github.com/harvestsure/coro-http/actions/workflows/windows.yml/badge.svg)](https://github.com/harvestsure/coro-http/actions/workflows/windows.yml)
-[![ubuntu](https://github.com/harvestsure/coro-http/actions/workflows/ubuntu.yml/badge.svg)](https://github.com/harvestsure/coro-http/actions/workflows/ubuntu.yml)
-[![macos](https://github.com/harvestsure/coro-http/actions/workflows/macos.yml/badge.svg)](https://github.com/harvestsure/coro-http/actions/workflows/macos.yml)
+[![windows](https://github.com/harvestsure/coro-http-client/actions/workflows/windows.yml/badge.svg)](https://github.com/harvestsure/coro-http-client/actions/workflows/windows.yml)
+[![ubuntu](https://github.com/harvestsure/coro-http-client/actions/workflows/ubuntu.yml/badge.svg)](https://github.com/harvestsure/coro-http-client/actions/workflows/ubuntu.yml)
+[![macos](https://github.com/harvestsure/coro-http-client/actions/workflows/macos.yml/badge.svg)](https://github.com/harvestsure/coro-http-client/actions/workflows/macos.yml)
 
 A modern C++20 HTTP/HTTPS client library with coroutine-based async/await API.
 
@@ -59,8 +59,8 @@ co_await client.co_stream_events(request, [](const coro_http::SseEvent& event) {
 ## Installation
 
 ```bash
-git clone https://github.com/harvestsure/coro-http.git
-cd coro-http
+git clone https://github.com/harvestsure/coro-http-client.git
+cd coro-http-client
 mkdir build && cd build
 cmake ..
 make

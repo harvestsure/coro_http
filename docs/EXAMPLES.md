@@ -142,7 +142,7 @@ client.run([&]() -> asio::awaitable<void> {
 
 Build examples:
 ```bash
-cd coro-http
+cd coro-http-client
 mkdir build && cd build
 cmake ..
 make example_sse_coro

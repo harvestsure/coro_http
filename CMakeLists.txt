@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20...3.31)
-project(coro_http CXX)
+project(coro-http-client CXX)
 
 if(POLICY CMP0135)
   cmake_policy(SET CMP0135 NEW)
