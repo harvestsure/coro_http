@@ -6,7 +6,8 @@ on:
   pull_request:
     branches: [ main, develop ]
 
-env: {}
+env:
+  VCPKG_COMMIT_ID: 688e57ffcb95380ba63e7e8a76e12fb674a7c4ef
 
 jobs:
   build-and-test:
@@ -24,14 +25,17 @@ jobs:
           vcpkg/installed
           vcpkg/buildtrees
           vcpkg/downloads
-        key: vcpkg-windows-${{ hashFiles('**/vcpkg.json') }}
+        key: vcpkg-windows-${{ env.VCPKG_COMMIT_ID }}-${{ hashFiles('**/vcpkg.json') }}
         restore-keys: |
-          vcpkg-windows-
+          vcpkg-windows-${{ env.VCPKG_COMMIT_ID }}-
     
     - name: Setup vcpkg
       uses: lukka/run-vcpkg@v11
       with:
+        vcpkgGitCommitId: '${{ env.VCPKG_COMMIT_ID }}'
         vcpkgJsonGlob: '**/vcpkg.json'
+        appendedCacheKey: ${{ github.run_id }}
+        vcpkgDirectory: ${{ github.workspace }}/vcpkg
     
     - name: Setup CMake
       uses: lukka/get-cmake@latest
@@ -39,15 +43,34 @@ jobs:
     - name: Create build directory
       run: mkdir -p build
     
-    - name: Configure CMake
+    - name: Configure CMake (with retry)
       shell: bash
       run: |
         cd build
-        cmake -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake" \
-          -DBUILD_TESTS=ON \
-          -DENABLE_SANITIZER=OFF \
-          -G "Visual Studio 17 2022" \
-          ..
+        max_attempts=3
+        attempt=1
+        while [ $attempt -le $max_attempts ]; do
+          echo "CMake configuration attempt $attempt of $max_attempts"
+          if cmake -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake" \
+            -DBUILD_TESTS=ON \
+            -DENABLE_SANITIZER=OFF \
+            -DCMAKE_POLICY_DEFAULT_CMP0174=NEW \
+            -G "Visual Studio 17 2022" \
+            ..; then
+            echo "CMake configuration succeeded"
+            exit 0
+          else
+            if [ $attempt -lt $max_attempts ]; then
+              echo "CMake configuration failed, retrying in 10 seconds..."
+              sleep 10
+              # Clean build directory for retry
+              rm -rf CMakeCache.txt CMakeFiles
+            fi
+          fi
+          attempt=$((attempt + 1))
+        done
+        echo "CMake configuration failed after $max_attempts attempts"
+        exit 1
     
     - name: Build
       run: |
